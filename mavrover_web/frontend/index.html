@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MavRover Web</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="header">
+        <div>
+          <div class="title">MavRover Web</div>
+          <div class="subtitle">Управление ArduRover (APM 2.8) через браузер</div>
+        </div>
+        <div class="status">
+          <span class="pill" id="wsStatus">WS: ...</span>
+          <span class="pill" id="linkStatus">MAVLink: ...</span>
+          <span class="pill" id="armedStatus">ARM: ...</span>
+          <span class="pill" id="modeStatus">MODE: ...</span>
+        </div>
+      </header>
+
+      <main class="grid">
+        <section class="card video">
+          <div class="cardTitle">Видео (ESP32-CAM)</div>
+          <div class="videoWrap">
+            <img id="video" alt="ESP32-CAM stream" referrerpolicy="no-referrer" />
+          </div>
+          <div class="hint" id="videoHint">Загрузка адреса видео из config.json...</div>
+        </section>
+
+        <section class="card controls">
+          <div class="cardTitle">Управление</div>
+          <div class="buttons">
+            <button class="btn danger" id="btnArm">ARM</button>
+            <button class="btn" id="btnDisarm">DISARM</button>
+          </div>
+          <div class="buttons">
+            <button class="btn" id="btnManual">MANUAL</button>
+            <button class="btn" id="btnHold">HOLD</button>
+            <button class="btn" id="btnAuto">AUTO</button>
+          </div>
+          <div class="buttons">
+            <button class="btn subtle" id="btnReboot">REBOOT APM</button>
+          </div>
+          <div class="hint">
+            Если кнопки не работают — смотри: MAVLink: not connected (порт/скорость/занят Mission Planner).
+          </div>
+        </section>
+
+        <section class="card telemetry">
+          <div class="cardTitle">Телеметрия</div>
+          <div class="kv">
+            <div class="k">Скорость</div><div class="v" id="speed">—</div>
+            <div class="k">Курс</div><div class="v" id="heading">—</div>
+            <div class="k">Батарея</div><div class="v" id="battery">—</div>
+            <div class="k">GPS</div><div class="v" id="gps">—</div>
+            <div class="k">Heartbeat age</div><div class="v" id="hbAge">—</div>
+          </div>
+        </section>
+
+        <section class="card logs">
+          <div class="cardTitle">Сообщения / Ошибки</div>
+          <pre class="log" id="log"></pre>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/main.js"></script>
+  </body>
+</html>
+
