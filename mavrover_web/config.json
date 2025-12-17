@@ -1,0 +1,7 @@
+{
+  "serial_port": "/dev/ttyUSB0",
+  "baudrate": 115200,
+  "video_url": "http://esp32-cam.local:81/stream",
+  "server_host": "0.0.0.0",
+  "server_port": 8000
+}
