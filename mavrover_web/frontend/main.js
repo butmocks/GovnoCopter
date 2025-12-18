@@ -17,7 +17,9 @@ function logMavOut(line) {
   const el = $("mavOut");
   if (!el) return;
   const ts = new Date().toLocaleTimeString();
-  el.textContent = `[${ts}] ${line}\n` + el.textContent;
+  // append (so quick LEFT->STOP is visible in order)
+  el.textContent = el.textContent + `[${ts}] ${line}\n`;
+  el.scrollTop = el.scrollHeight;
 }
 
 async function loadConfig() {
@@ -250,58 +252,99 @@ async function main() {
     thrBack: 1400,
   };
 
-  let holdTimer = null;
-  let holdCmd = { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrStop };
+  // Axis-based state so LEFT/RIGHT really "change" while moving forward/back.
+  const drive = {
+    steering_pwm: PWM.steerCenter,
+    throttle_pwm: PWM.thrStop,
+    steerActive: false,
+    throttleActive: false,
+    timer: null,
+  };
 
-  function startHold(cmd) {
-    holdCmd = cmd;
-    if (holdTimer) clearInterval(holdTimer);
-    // send immediately + keep sending while holding (helps if failsafe resets overrides)
-    send("rc_override", holdCmd);
-    holdTimer = setInterval(() => send("rc_override", holdCmd), 200);
+  function sendDriveOnce() {
+    send("rc_override", { steering_pwm: drive.steering_pwm, throttle_pwm: drive.throttle_pwm });
   }
 
-  function stopHold() {
-    if (holdTimer) clearInterval(holdTimer);
-    holdTimer = null;
-    send("rc_override", { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrStop });
+  function ensureDriveLoop() {
+    if (drive.timer) return;
+    sendDriveOnce();
+    drive.timer = setInterval(sendDriveOnce, 200);
   }
 
-  function bindHold(btn, cmd) {
+  function maybeStopLoop() {
+    if (drive.steerActive || drive.throttleActive) return;
+    if (drive.timer) clearInterval(drive.timer);
+    drive.timer = null;
+    drive.steering_pwm = PWM.steerCenter;
+    drive.throttle_pwm = PWM.thrStop;
+    sendDriveOnce();
+  }
+
+  function setSteer(pwm, active) {
+    drive.steering_pwm = pwm;
+    drive.steerActive = active;
+    if (active) ensureDriveLoop();
+    else {
+      drive.steering_pwm = PWM.steerCenter;
+      drive.steerActive = false;
+      maybeStopLoop();
+    }
+  }
+
+  function setThrottle(pwm, active) {
+    drive.throttle_pwm = pwm;
+    drive.throttleActive = active;
+    if (active) ensureDriveLoop();
+    else {
+      drive.throttle_pwm = PWM.thrStop;
+      drive.throttleActive = false;
+      maybeStopLoop();
+    }
+  }
+
+  function stopAll() {
+    drive.steerActive = false;
+    drive.throttleActive = false;
+    if (drive.timer) clearInterval(drive.timer);
+    drive.timer = null;
+    drive.steering_pwm = PWM.steerCenter;
+    drive.throttle_pwm = PWM.thrStop;
+    sendDriveOnce();
+  }
+
+  function bindAxisHold(btn, onDown, onUp) {
     btn.addEventListener("pointerdown", (e) => {
       e.preventDefault();
       btn.setPointerCapture?.(e.pointerId);
-      startHold(cmd);
+      onDown();
     });
     btn.addEventListener("pointerup", (e) => {
       e.preventDefault();
-      stopHold();
+      onUp();
     });
-    btn.addEventListener("pointercancel", stopHold);
-    btn.addEventListener("pointerleave", () => {
-      // if user drags pointer away while holding
-      // don't auto-stop unless still holding timer; safest is to stop
-      if (holdTimer) stopHold();
-    });
+    btn.addEventListener("pointercancel", onUp);
   }
 
-  bindHold($("btnMoveUp"), { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrFwd });
-  bindHold($("btnMoveDown"), { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrBack });
-  bindHold($("btnMoveLeft"), { steering_pwm: PWM.steerLeft, throttle_pwm: PWM.thrStop });
-  bindHold($("btnMoveRight"), { steering_pwm: PWM.steerRight, throttle_pwm: PWM.thrStop });
-  $("btnMoveStop").addEventListener("click", stopHold);
+  bindAxisHold($("btnMoveUp"), () => setThrottle(PWM.thrFwd, true), () => setThrottle(PWM.thrStop, false));
+  bindAxisHold($("btnMoveDown"), () => setThrottle(PWM.thrBack, true), () => setThrottle(PWM.thrStop, false));
+  bindAxisHold($("btnMoveLeft"), () => setSteer(PWM.steerLeft, true), () => setSteer(PWM.steerCenter, false));
+  bindAxisHold($("btnMoveRight"), () => setSteer(PWM.steerRight, true), () => setSteer(PWM.steerCenter, false));
+  $("btnMoveStop").addEventListener("click", stopAll);
 
   // Keyboard (WASD + Space stop)
   window.addEventListener("keydown", (e) => {
     if (e.repeat) return;
-    if (e.key === "w" || e.key === "W") startHold({ steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrFwd });
-    else if (e.key === "s" || e.key === "S") startHold({ steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrBack });
-    else if (e.key === "a" || e.key === "A") startHold({ steering_pwm: PWM.steerLeft, throttle_pwm: PWM.thrStop });
-    else if (e.key === "d" || e.key === "D") startHold({ steering_pwm: PWM.steerRight, throttle_pwm: PWM.thrStop });
-    else if (e.key === " ") stopHold();
+    if (e.key === "w" || e.key === "W") setThrottle(PWM.thrFwd, true);
+    else if (e.key === "s" || e.key === "S") setThrottle(PWM.thrBack, true);
+    else if (e.key === "a" || e.key === "A") setSteer(PWM.steerLeft, true);
+    else if (e.key === "d" || e.key === "D") setSteer(PWM.steerRight, true);
+    else if (e.key === " ") stopAll();
   });
   window.addEventListener("keyup", (e) => {
-    if (["w", "W", "a", "A", "s", "S", "d", "D"].includes(e.key)) stopHold();
+    if (e.key === "w" || e.key === "W") setThrottle(PWM.thrStop, false);
+    else if (e.key === "s" || e.key === "S") setThrottle(PWM.thrStop, false);
+    else if (e.key === "a" || e.key === "A") setSteer(PWM.steerCenter, false);
+    else if (e.key === "d" || e.key === "D") setSteer(PWM.steerCenter, false);
   });
 
   // --- Peripheral check (server-side) ---
