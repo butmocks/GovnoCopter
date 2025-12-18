@@ -1,0 +1,31 @@
+MavRover Web — отчёт пробного запуска
+Дата: 2025-12-17
+
+1) Зависимости
+- Установлено: fastapi, uvicorn, pymavlink, pydantic
+- Проверка импортов: OK (deps: ok)
+
+2) Проверка синтаксиса
+- python3 -m py_compile /workspace/mavrover_web/backend/*.py: OK
+
+3) Пробный запуск сервера (короткий, 3 секунды)
+Команда:
+  python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+Логи старта:
+  INFO:     Started server process [1602]
+  INFO:     Waiting for application startup.
+  INFO:     Application startup complete.
+  INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+  INFO:     Shutting down
+  INFO:     Waiting for application shutdown.
+  INFO:     Application shutdown complete.
+  INFO:     Finished server process [1602]
+
+4) Адреса (когда запущено у тебя на ноуте)
+- Веб-интерфейс: http://localhost:8000
+- С телефона в той же Wi‑Fi сети: http://<IP_ноута>:8000
+- WebSocket: ws://<host>:8000/ws
+- Конфиг для фронта: http://<host>:8000/api/config
+
+Примечание
+- В этой среде сервер был запущен только для проверки старта и остановлен автоматически по таймауту.
