@@ -24,8 +24,23 @@ function wsUrl() {
   return `${proto}://${location.host}/ws`;
 }
 
+function setVideoVisible(visible) {
+  const card = $("videoCard");
+  const btn = $("btnToggleVideo");
+  if (visible) card.classList.remove("hidden");
+  else card.classList.add("hidden");
+  btn.textContent = visible ? "Видео: ON" : "Видео: OFF";
+  localStorage.setItem("videoVisible", visible ? "1" : "0");
+}
+
+function getVideoVisible() {
+  return localStorage.getItem("videoVisible") !== "0";
+}
+
 async function main() {
   $("wsStatus").textContent = "WS: connecting...";
+  setVideoVisible(getVideoVisible());
+  $("btnToggleVideo").addEventListener("click", () => setVideoVisible(!getVideoVisible()));
 
   try {
     const cfg = await loadConfig();
@@ -71,6 +86,88 @@ async function main() {
   $("btnReboot").addEventListener("click", () => {
     if (confirm("Точно перезагрузить автопилот?")) send("reboot_autopilot");
   });
+
+  // --- Movement (RC override) ---
+  const PWM = {
+    steerCenter: 1500,
+    steerLeft: 1400,
+    steerRight: 1600,
+    thrStop: 1500,
+    thrFwd: 1600,
+    thrBack: 1400,
+  };
+
+  let holdTimer = null;
+  let holdCmd = { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrStop };
+
+  function startHold(cmd) {
+    holdCmd = cmd;
+    if (holdTimer) clearInterval(holdTimer);
+    // send immediately + keep sending while holding (helps if failsafe resets overrides)
+    send("rc_override", holdCmd);
+    holdTimer = setInterval(() => send("rc_override", holdCmd), 200);
+  }
+
+  function stopHold() {
+    if (holdTimer) clearInterval(holdTimer);
+    holdTimer = null;
+    send("rc_override", { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrStop });
+  }
+
+  function bindHold(btn, cmd) {
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      btn.setPointerCapture?.(e.pointerId);
+      startHold(cmd);
+    });
+    btn.addEventListener("pointerup", (e) => {
+      e.preventDefault();
+      stopHold();
+    });
+    btn.addEventListener("pointercancel", stopHold);
+    btn.addEventListener("pointerleave", () => {
+      // if user drags pointer away while holding
+      // don't auto-stop unless still holding timer; safest is to stop
+      if (holdTimer) stopHold();
+    });
+  }
+
+  bindHold($("btnMoveUp"), { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrFwd });
+  bindHold($("btnMoveDown"), { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrBack });
+  bindHold($("btnMoveLeft"), { steering_pwm: PWM.steerLeft, throttle_pwm: PWM.thrStop });
+  bindHold($("btnMoveRight"), { steering_pwm: PWM.steerRight, throttle_pwm: PWM.thrStop });
+  $("btnMoveStop").addEventListener("click", stopHold);
+
+  // Keyboard (WASD + Space stop)
+  window.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    if (e.key === "w" || e.key === "W") startHold({ steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrFwd });
+    else if (e.key === "s" || e.key === "S") startHold({ steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrBack });
+    else if (e.key === "a" || e.key === "A") startHold({ steering_pwm: PWM.steerLeft, throttle_pwm: PWM.thrStop });
+    else if (e.key === "d" || e.key === "D") startHold({ steering_pwm: PWM.steerRight, throttle_pwm: PWM.thrStop });
+    else if (e.key === " ") stopHold();
+  });
+  window.addEventListener("keyup", (e) => {
+    if (["w", "W", "a", "A", "s", "S", "d", "D"].includes(e.key)) stopHold();
+  });
+
+  // --- Peripheral check (server-side) ---
+  async function runCheck() {
+    $("checkHint").textContent = "Проверяю...";
+    try {
+      const res = await fetch("/api/check", { cache: "no-store" });
+      const j = await res.json();
+      const v = j.video || {};
+      $("perVideo").textContent = v.ok ? `OK (${v.content_type || "?"})` : `FAIL: ${v.error || "unknown"}`;
+      const m = j.mavlink || {};
+      logLine(`CHECK: mavlink.connected=${m.connected} ping=${m.ping?.ok ? "ok" : "fail"}`);
+      $("checkHint").textContent = "Готово.";
+    } catch (e) {
+      $("checkHint").textContent = "Ошибка проверки (см. лог).";
+      logLine(`CHECK error: ${e}`);
+    }
+  }
+  $("btnCheck").addEventListener("click", runCheck);
 
   ws.addEventListener("message", (ev) => {
     let msg;
@@ -118,6 +215,20 @@ async function main() {
     $("gps").textContent = gpsParts.length ? gpsParts.join(" / ") : "—";
 
     $("hbAge").textContent = t.last_heartbeat_age_s == null ? "—" : `${t.last_heartbeat_age_s.toFixed(1)} s`;
+
+    // Peripheral quick status (from telemetry)
+    const gpsOk = (g.fix_type != null && g.fix_type >= 3) && (g.sats != null && g.sats >= 4);
+    $("perGps").textContent = g.fix_type == null ? "—" : (gpsOk ? `OK (FIX ${g.fix_type}, ${g.sats || "?"} sats)` : `WARN (FIX ${g.fix_type}, ${g.sats || "?"} sats)`);
+    $("perBatt").textContent = b.voltage_v == null ? "—" : `OK (${b.voltage_v.toFixed(2)} V)`;
+
+    const sp = t.sensors_present;
+    const se = t.sensors_enabled;
+    const sh = t.sensors_health;
+    if (sh == null && sp == null && se == null) $("perSensors").textContent = "—";
+    else {
+      const hx = (v) => (v == null ? "—" : "0x" + Number(v >>> 0).toString(16));
+      $("perSensors").textContent = `present=${hx(sp)} enabled=${hx(se)} health=${hx(sh)}`;
+    }
 
     const errs = (t.errors || []).slice(0, 3);
     const warns = (t.warnings || []).slice(0, 3);

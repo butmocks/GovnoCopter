@@ -66,6 +66,15 @@ body {
   color: var(--muted);
 }
 
+.pillBtn {
+  cursor: pointer;
+  color: rgba(233, 239, 255, 0.9);
+}
+.pillBtn:hover {
+  border-color: rgba(110, 168, 254, 0.35);
+  background: rgba(110, 168, 254, 0.09);
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
@@ -148,6 +157,30 @@ body {
   font-size: 12px;
   color: var(--muted);
   margin-top: 8px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 10px 0;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 8px 0 4px;
+}
+
+.hidden {
+  display: none !important;
 }
 
 .kv {

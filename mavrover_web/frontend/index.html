@@ -18,11 +18,12 @@
           <span class="pill" id="linkStatus">MAVLink: ...</span>
           <span class="pill" id="armedStatus">ARM: ...</span>
           <span class="pill" id="modeStatus">MODE: ...</span>
+          <button class="pill pillBtn" id="btnToggleVideo" type="button">Видео: ...</button>
         </div>
       </header>
 
       <main class="grid">
-        <section class="card video">
+        <section class="card video" id="videoCard">
           <div class="cardTitle">Видео (ESP32-CAM)</div>
           <div class="videoWrap">
             <img id="video" alt="ESP32-CAM stream" referrerpolicy="no-referrer" />
@@ -41,6 +42,22 @@
             <button class="btn" id="btnHold">HOLD</button>
             <button class="btn" id="btnAuto">AUTO</button>
           </div>
+          <div class="divider"></div>
+          <div class="cardTitle">Движение (RC override)</div>
+          <div class="dpad">
+            <div></div>
+            <button class="btn" id="btnMoveUp">▲</button>
+            <div></div>
+            <button class="btn" id="btnMoveLeft">◀</button>
+            <button class="btn danger" id="btnMoveStop">STOP</button>
+            <button class="btn" id="btnMoveRight">▶</button>
+            <div></div>
+            <button class="btn" id="btnMoveDown">▼</button>
+            <div></div>
+          </div>
+          <div class="hint">
+            Нажми и держи: ▲▼◀▶. Отпустил — STOP. Работает в режиме, где автопилот принимает RC override (обычно MANUAL).
+          </div>
           <div class="buttons">
             <button class="btn subtle" id="btnReboot">REBOOT APM</button>
           </div>
@@ -58,6 +75,20 @@
             <div class="k">GPS</div><div class="v" id="gps">—</div>
             <div class="k">Heartbeat age</div><div class="v" id="hbAge">—</div>
           </div>
+        </section>
+
+        <section class="card peripherals">
+          <div class="row">
+            <div class="cardTitle">Периферия / Проверка</div>
+            <button class="pill pillBtn" id="btnCheck" type="button">Проверить</button>
+          </div>
+          <div class="kv">
+            <div class="k">Видео (server check)</div><div class="v" id="perVideo">—</div>
+            <div class="k">GPS</div><div class="v" id="perGps">—</div>
+            <div class="k">Батарея</div><div class="v" id="perBatt">—</div>
+            <div class="k">Sensors health</div><div class="v" id="perSensors">—</div>
+          </div>
+          <div class="hint" id="checkHint">Кнопка “Проверить” проверяет связь MAVLink (ping) и доступность video_url с сервера.</div>
         </section>
 
         <section class="card logs">
