@@ -12,7 +12,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .data_model import CommandRequest, CommandResponse, ServerEvent, TelemetryEvent
+from .data_model import CommandRequest, CommandResponse, MavOutEvent, ServerEvent, TelemetryEvent
 from .mavlink import MavlinkClient, MavlinkConfig, MavlinkError
 from .telemetry import TelemetryState, handle_mavlink_message
 
@@ -205,6 +205,10 @@ async def _run_command(cmd: CommandRequest) -> CommandResponse:
         return CommandResponse(ok=False, message="MAVLink: not connected")
 
     try:
+        # Log outgoing MAVLink commands for the UI.
+        # (This is best-effort; even if logging fails, we still try to execute the command.)
+        # Note: we return command_result separately; this event is just "what we tried to send".
+        # WebSocket handler will send MavOutEvent before calling this function if needed.
         if cmd.command == "arm":
             await anyio.to_thread.run_sync(mav.arm)
         elif cmd.command == "disarm":
@@ -225,6 +229,22 @@ async def _run_command(cmd: CommandRequest) -> CommandResponse:
                 mav.rc_override,
                 steering_pwm=None if steering_pwm is None else int(steering_pwm),
                 throttle_pwm=None if throttle_pwm is None else int(throttle_pwm),
+            )
+        elif cmd.command == "command_long":
+            cmd_id = int(cmd.params.get("cmd_id", 0))
+            if cmd_id <= 0:
+                raise MavlinkError("Missing/invalid params.cmd_id")
+            await anyio.to_thread.run_sync(
+                mav.command_long,
+                cmd_id=cmd_id,
+                p1=float(cmd.params.get("p1", 0.0)),
+                p2=float(cmd.params.get("p2", 0.0)),
+                p3=float(cmd.params.get("p3", 0.0)),
+                p4=float(cmd.params.get("p4", 0.0)),
+                p5=float(cmd.params.get("p5", 0.0)),
+                p6=float(cmd.params.get("p6", 0.0)),
+                p7=float(cmd.params.get("p7", 0.0)),
+                confirmation=int(cmd.params.get("confirmation", 0)),
             )
         else:
             return CommandResponse(ok=False, message=f"Unknown command: {cmd.command}")
@@ -258,6 +278,19 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     CommandResponse(ok=False, message=f"Bad command JSON: {e}").model_dump(),
                 )
                 continue
+
+            # Outgoing MAVLink "what we are sending" log event
+            try:
+                await _send_json(
+                    ws,
+                    MavOutEvent(
+                        name=cmd.command,
+                        params=cmd.params,
+                        ts_ms=int(time.time() * 1000),
+                    ).model_dump(),
+                )
+            except Exception:
+                pass
 
             res = await _run_command(cmd)
             await _send_json(ws, res.model_dump())

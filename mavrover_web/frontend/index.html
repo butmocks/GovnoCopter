@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MavRover Web</title>
     <link rel="stylesheet" href="/static/style.css" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
   </head>
   <body>
     <div class="container">
@@ -22,82 +28,195 @@
         </div>
       </header>
 
-      <main class="grid">
-        <section class="card video" id="videoCard">
-          <div class="cardTitle">Видео (ESP32-CAM)</div>
-          <div class="videoWrap">
-            <img id="video" alt="ESP32-CAM stream" referrerpolicy="no-referrer" />
+      <nav class="tabs" aria-label="Навигация">
+        <button class="tab active" data-tab="panel" type="button">Панель</button>
+        <button class="tab" data-tab="map" type="button">Карта</button>
+        <button class="tab" data-tab="builder" type="button">Конструктор</button>
+        <button class="tab" data-tab="help" type="button">Справка</button>
+      </nav>
+
+      <main>
+        <!-- PANEL -->
+        <section class="tabPanel" id="tab-panel">
+          <div class="grid">
+            <!-- Controls FIRST so they are visible on mobile -->
+            <section class="card controls sticky">
+              <div class="cardTitle">Управление</div>
+              <div class="buttons">
+                <button class="btn danger" id="btnArm">ARM</button>
+                <button class="btn" id="btnDisarm">DISARM</button>
+              </div>
+              <div class="buttons">
+                <button class="btn" id="btnManual">MANUAL</button>
+                <button class="btn" id="btnHold">HOLD</button>
+                <button class="btn" id="btnAuto">AUTO</button>
+              </div>
+              <div class="divider"></div>
+              <div class="cardTitle">Движение (RC override)</div>
+              <div class="dpad">
+                <div></div>
+                <button class="btn" id="btnMoveUp">▲</button>
+                <div></div>
+                <button class="btn" id="btnMoveLeft">◀</button>
+                <button class="btn danger" id="btnMoveStop">STOP</button>
+                <button class="btn" id="btnMoveRight">▶</button>
+                <div></div>
+                <button class="btn" id="btnMoveDown">▼</button>
+                <div></div>
+              </div>
+              <div class="hint">
+                Нажми и держи: ▲▼◀▶. Отпустил — STOP. Работает в режиме, где автопилот принимает RC override (обычно MANUAL).
+              </div>
+              <div class="buttons">
+                <button class="btn subtle" id="btnReboot">REBOOT APM</button>
+              </div>
+              <div class="hint">
+                Если кнопки не работают — смотри: MAVLink: not connected (порт/скорость/занят Mission Planner).
+              </div>
+            </section>
+
+            <section class="card video" id="videoCard">
+              <div class="cardTitle">Видео (ESP32-CAM)</div>
+              <div class="videoWrap">
+                <img id="video" alt="ESP32-CAM stream" referrerpolicy="no-referrer" />
+              </div>
+              <div class="hint" id="videoHint">Загрузка адреса видео из config.json...</div>
+            </section>
+
+            <section class="card telemetry">
+              <div class="cardTitle">Телеметрия</div>
+              <div class="kv">
+                <div class="k">Скорость</div><div class="v" id="speed">—</div>
+                <div class="k">Курс</div><div class="v" id="heading">—</div>
+                <div class="k">Батарея</div><div class="v" id="battery">—</div>
+                <div class="k">GPS</div><div class="v" id="gps">—</div>
+                <div class="k">Heartbeat age</div><div class="v" id="hbAge">—</div>
+              </div>
+            </section>
+
+            <section class="card peripherals">
+              <div class="row">
+                <div class="cardTitle">Периферия / Проверка</div>
+                <button class="pill pillBtn" id="btnCheck" type="button">Проверить</button>
+              </div>
+              <div class="kv">
+                <div class="k">Видео (server check)</div><div class="v" id="perVideo">—</div>
+                <div class="k">GPS</div><div class="v" id="perGps">—</div>
+                <div class="k">Батарея</div><div class="v" id="perBatt">—</div>
+                <div class="k">Sensors health</div><div class="v" id="perSensors">—</div>
+              </div>
+              <div class="hint" id="checkHint">Кнопка “Проверить” проверяет связь MAVLink (ping) и доступность video_url с сервера.</div>
+            </section>
+
+            <section class="card mavout">
+              <div class="cardTitle">MAVLink OUT (что отправили)</div>
+              <pre class="log logSmall" id="mavOut"></pre>
+            </section>
+
+            <section class="card logs">
+              <div class="cardTitle">Сообщения / Ошибки</div>
+              <pre class="log" id="log"></pre>
+            </section>
           </div>
-          <div class="hint" id="videoHint">Загрузка адреса видео из config.json...</div>
         </section>
 
-        <section class="card controls">
-          <div class="cardTitle">Управление</div>
-          <div class="buttons">
-            <button class="btn danger" id="btnArm">ARM</button>
-            <button class="btn" id="btnDisarm">DISARM</button>
-          </div>
-          <div class="buttons">
-            <button class="btn" id="btnManual">MANUAL</button>
-            <button class="btn" id="btnHold">HOLD</button>
-            <button class="btn" id="btnAuto">AUTO</button>
-          </div>
-          <div class="divider"></div>
-          <div class="cardTitle">Движение (RC override)</div>
-          <div class="dpad">
-            <div></div>
-            <button class="btn" id="btnMoveUp">▲</button>
-            <div></div>
-            <button class="btn" id="btnMoveLeft">◀</button>
-            <button class="btn danger" id="btnMoveStop">STOP</button>
-            <button class="btn" id="btnMoveRight">▶</button>
-            <div></div>
-            <button class="btn" id="btnMoveDown">▼</button>
-            <div></div>
-          </div>
-          <div class="hint">
-            Нажми и держи: ▲▼◀▶. Отпустил — STOP. Работает в режиме, где автопилот принимает RC override (обычно MANUAL).
-          </div>
-          <div class="buttons">
-            <button class="btn subtle" id="btnReboot">REBOOT APM</button>
-          </div>
-          <div class="hint">
-            Если кнопки не работают — смотри: MAVLink: not connected (порт/скорость/занят Mission Planner).
-          </div>
+        <!-- MAP -->
+        <section class="tabPanel hidden" id="tab-map">
+          <section class="card">
+            <div class="row">
+              <div class="cardTitle">Карта (GPS)</div>
+              <button class="pill pillBtn" id="btnMapFollow" type="button">Follow: ON</button>
+            </div>
+            <div class="mapWrap" id="map"></div>
+            <div class="hint" id="mapHint">Если GPS нет — карта будет пустой.</div>
+          </section>
         </section>
 
-        <section class="card telemetry">
-          <div class="cardTitle">Телеметрия</div>
-          <div class="kv">
-            <div class="k">Скорость</div><div class="v" id="speed">—</div>
-            <div class="k">Курс</div><div class="v" id="heading">—</div>
-            <div class="k">Батарея</div><div class="v" id="battery">—</div>
-            <div class="k">GPS</div><div class="v" id="gps">—</div>
-            <div class="k">Heartbeat age</div><div class="v" id="hbAge">—</div>
-          </div>
+        <!-- BUILDER -->
+        <section class="tabPanel hidden" id="tab-builder">
+          <section class="card">
+            <div class="cardTitle">Конструктор MAVLink (COMMAND_LONG)</div>
+            <div class="formGrid">
+              <label class="k">MAV_CMD id</label>
+              <input class="input" id="cmdId" type="number" min="1" step="1" value="400" />
+              <label class="k">confirmation</label>
+              <input class="input" id="cmdConf" type="number" min="0" step="1" value="0" />
+              <label class="k">param1..7</label>
+              <div class="params">
+                <input class="input" id="p1" type="number" step="any" value="1" />
+                <input class="input" id="p2" type="number" step="any" value="0" />
+                <input class="input" id="p3" type="number" step="any" value="0" />
+                <input class="input" id="p4" type="number" step="any" value="0" />
+                <input class="input" id="p5" type="number" step="any" value="0" />
+                <input class="input" id="p6" type="number" step="any" value="0" />
+                <input class="input" id="p7" type="number" step="any" value="0" />
+              </div>
+            </div>
+            <div class="buttons">
+              <button class="btn danger" id="btnSendCmdLong" type="button">Отправить COMMAND_LONG</button>
+              <button class="btn subtle" id="btnLoadExampleArm" type="button">Пример: ARM (400)</button>
+              <button class="btn subtle" id="btnLoadExampleReboot" type="button">Пример: REBOOT (246)</button>
+            </div>
+            <div class="hint">
+              Внимание: это “сырое” API. Неправильные значения могут привести к опасному поведению ровера.
+            </div>
+          </section>
         </section>
 
-        <section class="card peripherals">
-          <div class="row">
-            <div class="cardTitle">Периферия / Проверка</div>
-            <button class="pill pillBtn" id="btnCheck" type="button">Проверить</button>
-          </div>
-          <div class="kv">
-            <div class="k">Видео (server check)</div><div class="v" id="perVideo">—</div>
-            <div class="k">GPS</div><div class="v" id="perGps">—</div>
-            <div class="k">Батарея</div><div class="v" id="perBatt">—</div>
-            <div class="k">Sensors health</div><div class="v" id="perSensors">—</div>
-          </div>
-          <div class="hint" id="checkHint">Кнопка “Проверить” проверяет связь MAVLink (ping) и доступность video_url с сервера.</div>
-        </section>
-
-        <section class="card logs">
-          <div class="cardTitle">Сообщения / Ошибки</div>
-          <pre class="log" id="log"></pre>
+        <!-- HELP -->
+        <section class="tabPanel hidden" id="tab-help">
+          <section class="card">
+            <div class="cardTitle">Справочник команд</div>
+            <div class="help">
+              <div class="helpItem">
+                <div class="helpName">ARM / DISARM</div>
+                <div class="helpBody">
+                  <div><b>ARM</b>: включает моторы/активацию (если автопилот разрешит).</div>
+                  <div><b>DISARM</b>: выключает.</div>
+                </div>
+              </div>
+              <div class="helpItem">
+                <div class="helpName">SET_MODE</div>
+                <div class="helpBody">
+                  <div><b>MANUAL</b>: ручное управление (обычно принимает RC override).</div>
+                  <div><b>HOLD</b>: удержание.</div>
+                  <div><b>AUTO</b>: миссия.</div>
+                </div>
+              </div>
+              <div class="helpItem">
+                <div class="helpName">RC_OVERRIDE</div>
+                <div class="helpBody">
+                  <div>Отправляет <code>RC_CHANNELS_OVERRIDE</code>.</div>
+                  <div><b>steering_pwm</b>: 1000..2000 (CH1), 1500 центр.</div>
+                  <div><b>throttle_pwm</b>: 1000..2000 (CH3), 1500 стоп.</div>
+                  <div>Нужно удерживать (мы шлём каждые ~200ms, пока держишь кнопку).</div>
+                </div>
+              </div>
+              <div class="helpItem">
+                <div class="helpName">COMMAND_LONG</div>
+                <div class="helpBody">
+                  <div>Универсальная команда: <code>MAV_CMD</code> + 7 параметров.</div>
+                  <div>Пример ARM: <code>MAV_CMD_COMPONENT_ARM_DISARM</code> = 400, param1=1.</div>
+                  <div>Пример REBOOT: <code>MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN</code> = 246, param1=1.</div>
+                </div>
+              </div>
+              <div class="helpItem">
+                <div class="helpName">Проверка /api/check</div>
+                <div class="helpBody">
+                  <div>Проверяет MAVLink (ping) и доступность video_url с сервера.</div>
+                </div>
+              </div>
+            </div>
+          </section>
         </section>
       </main>
     </div>
 
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
     <script src="/static/main.js"></script>
   </body>
 </html>

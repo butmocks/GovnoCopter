@@ -13,6 +13,13 @@ function logLine(line) {
   el.textContent = `[${ts}] ${line}\n` + el.textContent;
 }
 
+function logMavOut(line) {
+  const el = $("mavOut");
+  if (!el) return;
+  const ts = new Date().toLocaleTimeString();
+  el.textContent = `[${ts}] ${line}\n` + el.textContent;
+}
+
 async function loadConfig() {
   const res = await fetch("/api/config", { cache: "no-store" });
   const cfg = await res.json();
@@ -37,10 +44,109 @@ function getVideoVisible() {
   return localStorage.getItem("videoVisible") !== "0";
 }
 
+function setActiveTab(tabId) {
+  const tabs = document.querySelectorAll(".tab");
+  tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tabId));
+
+  const panel = $("tab-panel");
+  const map = $("tab-map");
+  const builder = $("tab-builder");
+  const help = $("tab-help");
+  panel.classList.toggle("hidden", tabId !== "panel");
+  map.classList.toggle("hidden", tabId !== "map");
+  builder.classList.toggle("hidden", tabId !== "builder");
+  help.classList.toggle("hidden", tabId !== "help");
+
+  localStorage.setItem("activeTab", tabId);
+
+  if (tabId === "map") {
+    initMapOnce();
+    // Leaflet needs a resize after showing
+    setTimeout(() => {
+      if (window.__mavMap) window.__mavMap.invalidateSize();
+    }, 150);
+  }
+}
+
+function getActiveTab() {
+  return localStorage.getItem("activeTab") || "panel";
+}
+
+function toRad(d) {
+  return (d * Math.PI) / 180;
+}
+
+function approxDistanceM(a, b) {
+  // Equirectangular approximation is fine for small distances
+  const R = 6371000;
+  const x = toRad(b.lon - a.lon) * Math.cos(toRad((a.lat + b.lat) / 2));
+  const y = toRad(b.lat - a.lat);
+  return Math.sqrt(x * x + y * y) * R;
+}
+
+function initMapOnce() {
+  if (window.__mavMapInit) return;
+  window.__mavMapInit = true;
+  if (!window.L) {
+    logLine("Leaflet не загрузился (нет карты).");
+    return;
+  }
+  const el = $("map");
+  if (!el) return;
+  const map = L.map(el, { zoomControl: true });
+  window.__mavMap = map;
+  window.__mavMapFollow = true;
+  window.__mavTrack = [];
+  window.__mavPolyline = L.polyline([], { color: "#6ea8fe", weight: 4, opacity: 0.85 }).addTo(map);
+  window.__mavMarker = L.circleMarker([0, 0], { radius: 7, color: "#46d39a", weight: 2, fillOpacity: 0.85 }).addTo(map);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+
+  map.setView([0, 0], 2);
+
+  $("btnMapFollow").addEventListener("click", () => {
+    window.__mavMapFollow = !window.__mavMapFollow;
+    $("btnMapFollow").textContent = window.__mavMapFollow ? "Follow: ON" : "Follow: OFF";
+  });
+}
+
+function pushGpsPoint(lat, lon) {
+  if (!window.__mavMap || !window.__mavTrack) return;
+  const p = { lat, lon, ts: Date.now() };
+  const track = window.__mavTrack;
+  const last = track.length ? track[track.length - 1] : null;
+  if (last) {
+    const d = approxDistanceM({ lat: last.lat, lon: last.lon }, p);
+    if (d < 0.8) return; // ignore tiny jitter
+  }
+  track.push(p);
+  if (track.length > 2000) track.splice(0, track.length - 2000);
+
+  const ll = [lat, lon];
+  window.__mavMarker.setLatLng(ll);
+  window.__mavPolyline.setLatLngs(track.map((x) => [x.lat, x.lon]));
+
+  if (window.__mavMapFollow) {
+    const z = window.__mavMap.getZoom();
+    window.__mavMap.setView(ll, Math.max(16, z), { animate: false });
+  }
+
+  $("mapHint").textContent = `Точек: ${track.length}`;
+}
+
 async function main() {
   $("wsStatus").textContent = "WS: connecting...";
   setVideoVisible(getVideoVisible());
   $("btnToggleVideo").addEventListener("click", () => setVideoVisible(!getVideoVisible()));
+
+  // Tabs
+  document.querySelectorAll(".tab").forEach((b) => {
+    b.addEventListener("click", () => setActiveTab(b.dataset.tab));
+  });
+  setActiveTab(getActiveTab());
 
   try {
     const cfg = await loadConfig();
@@ -85,6 +191,53 @@ async function main() {
   $("btnAuto").addEventListener("click", () => send("set_mode", { mode: "AUTO" }));
   $("btnReboot").addEventListener("click", () => {
     if (confirm("Точно перезагрузить автопилот?")) send("reboot_autopilot");
+  });
+
+  // --- COMMAND_LONG builder ---
+  function loadExampleArm() {
+    $("cmdId").value = "400";
+    $("cmdConf").value = "0";
+    $("p1").value = "1";
+    $("p2").value = "0";
+    $("p3").value = "0";
+    $("p4").value = "0";
+    $("p5").value = "0";
+    $("p6").value = "0";
+    $("p7").value = "0";
+  }
+  function loadExampleReboot() {
+    $("cmdId").value = "246";
+    $("cmdConf").value = "0";
+    $("p1").value = "1";
+    $("p2").value = "0";
+    $("p3").value = "0";
+    $("p4").value = "0";
+    $("p5").value = "0";
+    $("p6").value = "0";
+    $("p7").value = "0";
+  }
+  $("btnLoadExampleArm").addEventListener("click", loadExampleArm);
+  $("btnLoadExampleReboot").addEventListener("click", loadExampleReboot);
+  $("btnSendCmdLong").addEventListener("click", () => {
+    const cmd_id = Number($("cmdId").value);
+    const confirmation = Number($("cmdConf").value || 0);
+    const params = {
+      cmd_id,
+      confirmation,
+      p1: Number($("p1").value || 0),
+      p2: Number($("p2").value || 0),
+      p3: Number($("p3").value || 0),
+      p4: Number($("p4").value || 0),
+      p5: Number($("p5").value || 0),
+      p6: Number($("p6").value || 0),
+      p7: Number($("p7").value || 0),
+    };
+    if (!Number.isFinite(cmd_id) || cmd_id <= 0) {
+      logLine("COMMAND_LONG: неверный MAV_CMD id");
+      return;
+    }
+    if (!confirm(`Отправить COMMAND_LONG cmd_id=${cmd_id}?`)) return;
+    send("command_long", params);
   });
 
   // --- Movement (RC override) ---
@@ -182,6 +335,13 @@ async function main() {
       return;
     }
 
+    if (msg.type === "mav_out") {
+      const name = msg.name || "unknown";
+      const params = msg.params || {};
+      logMavOut(`${name} ${JSON.stringify(params)}`);
+      return;
+    }
+
     if (msg.type === "command_result") {
       if (msg.ok) logLine(`Команда OK`);
       else logLine(`Команда ERROR: ${msg.message || "unknown"}`);
@@ -228,6 +388,12 @@ async function main() {
     else {
       const hx = (v) => (v == null ? "—" : "0x" + Number(v >>> 0).toString(16));
       $("perSensors").textContent = `present=${hx(sp)} enabled=${hx(se)} health=${hx(sh)}`;
+    }
+
+    // Map update if available
+    if (g.lat != null && g.lon != null) {
+      // only push when map is initialized; we still keep data ready
+      if (window.__mavMapInit) pushGpsPoint(Number(g.lat), Number(g.lon));
     }
 
     const errs = (t.errors || []).slice(0, 3);

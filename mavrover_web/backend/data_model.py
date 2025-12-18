@@ -50,6 +50,7 @@ CommandType = Literal[
     "set_mode",
     "reboot_autopilot",
     "rc_override",
+    "command_long",
 ]
 
 
@@ -74,3 +75,10 @@ class ServerEvent(BaseModel):
     type: Literal["server"] = "server"
     level: Literal["info", "warning", "error"] = "info"
     message: str
+
+
+class MavOutEvent(BaseModel):
+    type: Literal["mav_out"] = "mav_out"
+    name: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    ts_ms: int

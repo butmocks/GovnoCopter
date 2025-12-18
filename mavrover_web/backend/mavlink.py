@@ -197,3 +197,39 @@ class MavlinkClient:
             0,  # chan8_raw
         )
 
+    def command_long(
+        self,
+        *,
+        cmd_id: int,
+        p1: float = 0.0,
+        p2: float = 0.0,
+        p3: float = 0.0,
+        p4: float = 0.0,
+        p5: float = 0.0,
+        p6: float = 0.0,
+        p7: float = 0.0,
+        confirmation: int = 0,
+    ) -> None:
+        """
+        Generic COMMAND_LONG sender (MAV_CMD).
+
+        cmd_id: integer MAV_CMD id (e.g. 400 for MAV_CMD_COMPONENT_ARM_DISARM)
+        p1..p7: float params
+        confirmation: usually 0
+        """
+        if self.master is None:
+            raise MavlinkError("Not connected")
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            int(cmd_id),
+            int(confirmation),
+            float(p1),
+            float(p2),
+            float(p3),
+            float(p4),
+            float(p5),
+            float(p6),
+            float(p7),
+        )
+
