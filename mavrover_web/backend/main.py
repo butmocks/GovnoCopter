@@ -94,7 +94,9 @@ def mavlink_rx_loop() -> None:
 
 app = FastAPI(title="MavRover Web")
 
-app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
+# Не падаем при импорте, если фронтенд- папка отсутствует (частая причина "Could not import module").
+# В нормальном случае папка есть и статика будет отдаваться как обычно.
+app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR), check_dir=False), name="static")
 
 
 @app.on_event("startup")
