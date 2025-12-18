@@ -13,6 +13,13 @@ function logLine(line) {
   el.textContent = `[${ts}] ${line}\n` + el.textContent;
 }
 
+function logMavOut(line) {
+  const el = $("mavOut");
+  if (!el) return;
+  const ts = new Date().toLocaleTimeString();
+  el.textContent = `[${ts}] ${line}\n` + el.textContent;
+}
+
 async function loadConfig() {
   const res = await fetch("/api/config", { cache: "no-store" });
   const cfg = await res.json();
@@ -24,8 +31,122 @@ function wsUrl() {
   return `${proto}://${location.host}/ws`;
 }
 
+function setVideoVisible(visible) {
+  const card = $("videoCard");
+  const btn = $("btnToggleVideo");
+  if (visible) card.classList.remove("hidden");
+  else card.classList.add("hidden");
+  btn.textContent = visible ? "Видео: ON" : "Видео: OFF";
+  localStorage.setItem("videoVisible", visible ? "1" : "0");
+}
+
+function getVideoVisible() {
+  return localStorage.getItem("videoVisible") !== "0";
+}
+
+function setActiveTab(tabId) {
+  const tabs = document.querySelectorAll(".tab");
+  tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tabId));
+
+  const panel = $("tab-panel");
+  const map = $("tab-map");
+  const builder = $("tab-builder");
+  const help = $("tab-help");
+  panel.classList.toggle("hidden", tabId !== "panel");
+  map.classList.toggle("hidden", tabId !== "map");
+  builder.classList.toggle("hidden", tabId !== "builder");
+  help.classList.toggle("hidden", tabId !== "help");
+
+  localStorage.setItem("activeTab", tabId);
+
+  if (tabId === "map") {
+    initMapOnce();
+    // Leaflet needs a resize after showing
+    setTimeout(() => {
+      if (window.__mavMap) window.__mavMap.invalidateSize();
+    }, 150);
+  }
+}
+
+function getActiveTab() {
+  return localStorage.getItem("activeTab") || "panel";
+}
+
+function toRad(d) {
+  return (d * Math.PI) / 180;
+}
+
+function approxDistanceM(a, b) {
+  // Equirectangular approximation is fine for small distances
+  const R = 6371000;
+  const x = toRad(b.lon - a.lon) * Math.cos(toRad((a.lat + b.lat) / 2));
+  const y = toRad(b.lat - a.lat);
+  return Math.sqrt(x * x + y * y) * R;
+}
+
+function initMapOnce() {
+  if (window.__mavMapInit) return;
+  window.__mavMapInit = true;
+  if (!window.L) {
+    logLine("Leaflet не загрузился (нет карты).");
+    return;
+  }
+  const el = $("map");
+  if (!el) return;
+  const map = L.map(el, { zoomControl: true });
+  window.__mavMap = map;
+  window.__mavMapFollow = true;
+  window.__mavTrack = [];
+  window.__mavPolyline = L.polyline([], { color: "#6ea8fe", weight: 4, opacity: 0.85 }).addTo(map);
+  window.__mavMarker = L.circleMarker([0, 0], { radius: 7, color: "#46d39a", weight: 2, fillOpacity: 0.85 }).addTo(map);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(map);
+
+  map.setView([0, 0], 2);
+
+  $("btnMapFollow").addEventListener("click", () => {
+    window.__mavMapFollow = !window.__mavMapFollow;
+    $("btnMapFollow").textContent = window.__mavMapFollow ? "Follow: ON" : "Follow: OFF";
+  });
+}
+
+function pushGpsPoint(lat, lon) {
+  if (!window.__mavMap || !window.__mavTrack) return;
+  const p = { lat, lon, ts: Date.now() };
+  const track = window.__mavTrack;
+  const last = track.length ? track[track.length - 1] : null;
+  if (last) {
+    const d = approxDistanceM({ lat: last.lat, lon: last.lon }, p);
+    if (d < 0.8) return; // ignore tiny jitter
+  }
+  track.push(p);
+  if (track.length > 2000) track.splice(0, track.length - 2000);
+
+  const ll = [lat, lon];
+  window.__mavMarker.setLatLng(ll);
+  window.__mavPolyline.setLatLngs(track.map((x) => [x.lat, x.lon]));
+
+  if (window.__mavMapFollow) {
+    const z = window.__mavMap.getZoom();
+    window.__mavMap.setView(ll, Math.max(16, z), { animate: false });
+  }
+
+  $("mapHint").textContent = `Точек: ${track.length}`;
+}
+
 async function main() {
   $("wsStatus").textContent = "WS: connecting...";
+  setVideoVisible(getVideoVisible());
+  $("btnToggleVideo").addEventListener("click", () => setVideoVisible(!getVideoVisible()));
+
+  // Tabs
+  document.querySelectorAll(".tab").forEach((b) => {
+    b.addEventListener("click", () => setActiveTab(b.dataset.tab));
+  });
+  setActiveTab(getActiveTab());
 
   try {
     const cfg = await loadConfig();
@@ -72,6 +193,135 @@ async function main() {
     if (confirm("Точно перезагрузить автопилот?")) send("reboot_autopilot");
   });
 
+  // --- COMMAND_LONG builder ---
+  function loadExampleArm() {
+    $("cmdId").value = "400";
+    $("cmdConf").value = "0";
+    $("p1").value = "1";
+    $("p2").value = "0";
+    $("p3").value = "0";
+    $("p4").value = "0";
+    $("p5").value = "0";
+    $("p6").value = "0";
+    $("p7").value = "0";
+  }
+  function loadExampleReboot() {
+    $("cmdId").value = "246";
+    $("cmdConf").value = "0";
+    $("p1").value = "1";
+    $("p2").value = "0";
+    $("p3").value = "0";
+    $("p4").value = "0";
+    $("p5").value = "0";
+    $("p6").value = "0";
+    $("p7").value = "0";
+  }
+  $("btnLoadExampleArm").addEventListener("click", loadExampleArm);
+  $("btnLoadExampleReboot").addEventListener("click", loadExampleReboot);
+  $("btnSendCmdLong").addEventListener("click", () => {
+    const cmd_id = Number($("cmdId").value);
+    const confirmation = Number($("cmdConf").value || 0);
+    const params = {
+      cmd_id,
+      confirmation,
+      p1: Number($("p1").value || 0),
+      p2: Number($("p2").value || 0),
+      p3: Number($("p3").value || 0),
+      p4: Number($("p4").value || 0),
+      p5: Number($("p5").value || 0),
+      p6: Number($("p6").value || 0),
+      p7: Number($("p7").value || 0),
+    };
+    if (!Number.isFinite(cmd_id) || cmd_id <= 0) {
+      logLine("COMMAND_LONG: неверный MAV_CMD id");
+      return;
+    }
+    if (!confirm(`Отправить COMMAND_LONG cmd_id=${cmd_id}?`)) return;
+    send("command_long", params);
+  });
+
+  // --- Movement (RC override) ---
+  const PWM = {
+    steerCenter: 1500,
+    steerLeft: 1400,
+    steerRight: 1600,
+    thrStop: 1500,
+    thrFwd: 1600,
+    thrBack: 1400,
+  };
+
+  let holdTimer = null;
+  let holdCmd = { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrStop };
+
+  function startHold(cmd) {
+    holdCmd = cmd;
+    if (holdTimer) clearInterval(holdTimer);
+    // send immediately + keep sending while holding (helps if failsafe resets overrides)
+    send("rc_override", holdCmd);
+    holdTimer = setInterval(() => send("rc_override", holdCmd), 200);
+  }
+
+  function stopHold() {
+    if (holdTimer) clearInterval(holdTimer);
+    holdTimer = null;
+    send("rc_override", { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrStop });
+  }
+
+  function bindHold(btn, cmd) {
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      btn.setPointerCapture?.(e.pointerId);
+      startHold(cmd);
+    });
+    btn.addEventListener("pointerup", (e) => {
+      e.preventDefault();
+      stopHold();
+    });
+    btn.addEventListener("pointercancel", stopHold);
+    btn.addEventListener("pointerleave", () => {
+      // if user drags pointer away while holding
+      // don't auto-stop unless still holding timer; safest is to stop
+      if (holdTimer) stopHold();
+    });
+  }
+
+  bindHold($("btnMoveUp"), { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrFwd });
+  bindHold($("btnMoveDown"), { steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrBack });
+  bindHold($("btnMoveLeft"), { steering_pwm: PWM.steerLeft, throttle_pwm: PWM.thrStop });
+  bindHold($("btnMoveRight"), { steering_pwm: PWM.steerRight, throttle_pwm: PWM.thrStop });
+  $("btnMoveStop").addEventListener("click", stopHold);
+
+  // Keyboard (WASD + Space stop)
+  window.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    if (e.key === "w" || e.key === "W") startHold({ steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrFwd });
+    else if (e.key === "s" || e.key === "S") startHold({ steering_pwm: PWM.steerCenter, throttle_pwm: PWM.thrBack });
+    else if (e.key === "a" || e.key === "A") startHold({ steering_pwm: PWM.steerLeft, throttle_pwm: PWM.thrStop });
+    else if (e.key === "d" || e.key === "D") startHold({ steering_pwm: PWM.steerRight, throttle_pwm: PWM.thrStop });
+    else if (e.key === " ") stopHold();
+  });
+  window.addEventListener("keyup", (e) => {
+    if (["w", "W", "a", "A", "s", "S", "d", "D"].includes(e.key)) stopHold();
+  });
+
+  // --- Peripheral check (server-side) ---
+  async function runCheck() {
+    $("checkHint").textContent = "Проверяю...";
+    try {
+      const res = await fetch("/api/check", { cache: "no-store" });
+      const j = await res.json();
+      const v = j.video || {};
+      $("perVideo").textContent = v.ok ? `OK (${v.content_type || "?"})` : `FAIL: ${v.error || "unknown"}`;
+      const m = j.mavlink || {};
+      logLine(`CHECK: mavlink.connected=${m.connected} ping=${m.ping?.ok ? "ok" : "fail"}`);
+      $("checkHint").textContent = "Готово.";
+    } catch (e) {
+      $("checkHint").textContent = "Ошибка проверки (см. лог).";
+      logLine(`CHECK error: ${e}`);
+    }
+  }
+  $("btnCheck").addEventListener("click", runCheck);
+
   ws.addEventListener("message", (ev) => {
     let msg;
     try {
@@ -82,6 +332,13 @@ async function main() {
 
     if (msg.type === "server") {
       logLine(msg.message);
+      return;
+    }
+
+    if (msg.type === "mav_out") {
+      const name = msg.name || "unknown";
+      const params = msg.params || {};
+      logMavOut(`${name} ${JSON.stringify(params)}`);
       return;
     }
 
@@ -118,6 +375,26 @@ async function main() {
     $("gps").textContent = gpsParts.length ? gpsParts.join(" / ") : "—";
 
     $("hbAge").textContent = t.last_heartbeat_age_s == null ? "—" : `${t.last_heartbeat_age_s.toFixed(1)} s`;
+
+    // Peripheral quick status (from telemetry)
+    const gpsOk = (g.fix_type != null && g.fix_type >= 3) && (g.sats != null && g.sats >= 4);
+    $("perGps").textContent = g.fix_type == null ? "—" : (gpsOk ? `OK (FIX ${g.fix_type}, ${g.sats || "?"} sats)` : `WARN (FIX ${g.fix_type}, ${g.sats || "?"} sats)`);
+    $("perBatt").textContent = b.voltage_v == null ? "—" : `OK (${b.voltage_v.toFixed(2)} V)`;
+
+    const sp = t.sensors_present;
+    const se = t.sensors_enabled;
+    const sh = t.sensors_health;
+    if (sh == null && sp == null && se == null) $("perSensors").textContent = "—";
+    else {
+      const hx = (v) => (v == null ? "—" : "0x" + Number(v >>> 0).toString(16));
+      $("perSensors").textContent = `present=${hx(sp)} enabled=${hx(se)} health=${hx(sh)}`;
+    }
+
+    // Map update if available
+    if (g.lat != null && g.lon != null) {
+      // only push when map is initialized; we still keep data ready
+      if (window.__mavMapInit) pushGpsPoint(Number(g.lat), Number(g.lon));
+    }
 
     const errs = (t.errors || []).slice(0, 3);
     const warns = (t.warnings || []).slice(0, 3);

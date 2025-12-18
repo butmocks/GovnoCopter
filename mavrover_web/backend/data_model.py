@@ -33,6 +33,10 @@ class TelemetryModel(BaseModel):
     gps: GPSModel = Field(default_factory=GPSModel)
     battery: BatteryModel = Field(default_factory=BatteryModel)
 
+    sensors_present: int | None = None
+    sensors_enabled: int | None = None
+    sensors_health: int | None = None
+
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     statustext: list[str] = Field(default_factory=list)
@@ -45,6 +49,8 @@ CommandType = Literal[
     "disarm",
     "set_mode",
     "reboot_autopilot",
+    "rc_override",
+    "command_long",
 ]
 
 
@@ -69,3 +75,10 @@ class ServerEvent(BaseModel):
     type: Literal["server"] = "server"
     level: Literal["info", "warning", "error"] = "info"
     message: str
+
+
+class MavOutEvent(BaseModel):
+    type: Literal["mav_out"] = "mav_out"
+    name: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    ts_ms: int

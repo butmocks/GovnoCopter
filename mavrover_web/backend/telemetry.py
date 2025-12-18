@@ -53,6 +53,9 @@ def handle_mavlink_message(state: TelemetryState, msg: object) -> None:
         batt_mv = getattr(msg, "voltage_battery", None)  # mV
         batt_ma = getattr(msg, "current_battery", None)  # 10mA units, -1 unknown
         remaining = getattr(msg, "battery_remaining", None)  # %
+        state.data.sensors_present = getattr(msg, "onboard_control_sensors_present", None)
+        state.data.sensors_enabled = getattr(msg, "onboard_control_sensors_enabled", None)
+        state.data.sensors_health = getattr(msg, "onboard_control_sensors_health", None)
         b = state.data.battery if isinstance(state.data.battery, BatteryModel) else BatteryModel()
         if isinstance(batt_mv, (int, float)) and batt_mv != 0:
             b.voltage_v = float(batt_mv) / 1000.0

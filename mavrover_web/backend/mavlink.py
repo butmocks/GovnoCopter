@@ -163,3 +163,73 @@ class MavlinkClient:
         now_us = int(time.time() * 1_000_000)
         self.master.mav.ping_send(now_us, 0, 0, 0)
 
+    def rc_override(self, *, steering_pwm: int | None = None, throttle_pwm: int | None = None) -> None:
+        """
+        Send RC_CHANNELS_OVERRIDE for rover-style manual driving.
+
+        Typical ArduRover mapping:
+        - CH1: steering
+        - CH3: throttle
+        Values are PWM in [1000..2000]. Use None to not override that channel.
+        """
+        if self.master is None:
+            raise MavlinkError("Not connected")
+
+        def _pwm(v: int | None) -> int:
+            if v is None:
+                return 0  # 0/65535 => ignore, ArduPilot treats 0 as "no override"
+            v = int(v)
+            return max(1000, min(2000, v))
+
+        ch1 = _pwm(steering_pwm)
+        ch3 = _pwm(throttle_pwm)
+        # channels: 1..8
+        self.master.mav.rc_channels_override_send(
+            self.master.target_system,
+            self.master.target_component,
+            ch1,  # chan1_raw (steering)
+            0,  # chan2_raw
+            ch3,  # chan3_raw (throttle)
+            0,  # chan4_raw
+            0,  # chan5_raw
+            0,  # chan6_raw
+            0,  # chan7_raw
+            0,  # chan8_raw
+        )
+
+    def command_long(
+        self,
+        *,
+        cmd_id: int,
+        p1: float = 0.0,
+        p2: float = 0.0,
+        p3: float = 0.0,
+        p4: float = 0.0,
+        p5: float = 0.0,
+        p6: float = 0.0,
+        p7: float = 0.0,
+        confirmation: int = 0,
+    ) -> None:
+        """
+        Generic COMMAND_LONG sender (MAV_CMD).
+
+        cmd_id: integer MAV_CMD id (e.g. 400 for MAV_CMD_COMPONENT_ARM_DISARM)
+        p1..p7: float params
+        confirmation: usually 0
+        """
+        if self.master is None:
+            raise MavlinkError("Not connected")
+        self.master.mav.command_long_send(
+            self.master.target_system,
+            self.master.target_component,
+            int(cmd_id),
+            int(confirmation),
+            float(p1),
+            float(p2),
+            float(p3),
+            float(p4),
+            float(p5),
+            float(p6),
+            float(p7),
+        )
+

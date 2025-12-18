@@ -1,0 +1,20 @@
+Проверка развёрнутого инстанса + изменения UI/периферии
+Дата: 2025-12-18
+
+1) Проверка доступности текущего деплоя
+- GET / (http://frozzy-test.nhost.com.ua:8000/): 200 OK (server: uvicorn)
+- GET /api/config: 200 OK, JSON: {"video_url":"http://esp32-cam.local:81/stream"}
+- Static /static/main.js: 200 OK
+- WebSocket ws://frozzy-test.nhost.com.ua:8000/ws: подключение OK, первая запись: {"type":"server","level":"info","message":"WS connected"}
+
+2) Сделанные изменения (в коде репозитория)
+- frontend: добавлено скрытие/показ видео (toggle, сохраняется в localStorage)
+- frontend: добавлен D-Pad управление (▲▼◀▶ + STOP) через WebSocket команду rc_override; добавлены WASD + Space
+- backend: добавлена команда rc_override (RC_CHANNELS_OVERRIDE, CH1 steering / CH3 throttle)
+- backend: добавлен /api/check (server-side ping MAVLink + проверка video_url с сервера)
+- telemetry: добавлены поля SYS_STATUS sensor bitmasks (present/enabled/health)
+
+3) Что нужно, чтобы это появилось на твоём URL
+- Забрать свежие изменения из репо/ветки и пересобрать/перезапустить деплой.
+
+Файл отчёта создан по правилу: reports/...
